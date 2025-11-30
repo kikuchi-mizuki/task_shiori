@@ -220,16 +220,20 @@ class AIService:
             # 来週
             if re.search(r'来週', phrase):
                 # 来週の月曜日を計算
-                days_until_next_monday = (7 - now.weekday()) % 7
-                if days_until_next_monday == 0:  # 今日が月曜日の場合
-                    days_until_next_monday = 7
-                next_monday = now + timedelta(days=days_until_next_monday)
+                # 今週の月曜日までの日数を計算（0=月曜日, 6=日曜日）
+                days_since_monday = now.weekday()
+                # 今週の月曜日を計算
+                this_monday = now - timedelta(days=days_since_monday)
+                # 来週の月曜日を計算（今週の月曜日から7日後）
+                next_monday = this_monday + timedelta(days=7)
                 
-                # 来週の7日間を生成
+                # 来週の7日間を生成（月曜日から日曜日まで）
                 week_dates = []
                 for i in range(7):
                     week_date = next_monday + timedelta(days=i)
                     week_dates.append(week_date.strftime('%Y-%m-%d'))
+                
+                print(f"[DEBUG] 来週の計算: 今日={now.strftime('%Y-%m-%d (%A)')}, 来週の月曜日={next_monday.strftime('%Y-%m-%d (%A)')}")
                 
                 # 来週の各日付に対して空き時間確認のエントリを作成
                 for week_date in week_dates:
