@@ -850,8 +850,13 @@ class AIService:
         print(f"[DEBUG] 日付ごとの空き時間: {date_slots}")
         
         response = "✅以下が空き時間です！\n\n"
-        for date in sorted(date_slots.keys()):
-            slots = sorted(list(date_slots[date]))
+        # 日付をソート（文字列としてソートされるが、YYYY-MM-DD形式なので正しくソートされる）
+        sorted_dates = sorted(date_slots.keys())
+        
+        date_lines = []
+        for date in sorted_dates:
+            # 時間帯を時刻順にソート（タプルを開始時刻でソート）
+            slots = sorted(list(date_slots[date]), key=lambda x: x[0])
             print(f"[DEBUG] 日付{date}の最終空き時間: {slots}")
             
             # 空き時間がない日付は表示しない
@@ -861,14 +866,20 @@ class AIService:
             # 空き時間がある日付のみ表示
             dt = jst.localize(datetime.strptime(date, "%Y-%m-%d"))
             weekday = "月火水木金土日"[dt.weekday()]
-            response += f"{dt.month}/{dt.day}（{weekday}）\n"
+            date_line = f"{dt.month}/{dt.day}（{weekday}）\n"
             
+            # 時間帯を時刻順に表示
             for start, end in slots:
-                response += f"・{start}〜{end}\n"
-                    
+                date_line += f"・{start}〜{end}\n"
+            
+            date_lines.append(date_line)
+        
         # 全ての日付で空き時間がない場合
-        if response == "✅以下が空き時間です！\n\n":
+        if not date_lines:
             return "✅空き時間はありませんでした。"
+        
+        # 日付ごとの行を結合（最後の日付の後に改行を追加しない）
+        response += "\n".join(date_lines).rstrip()
                     
         print(f"[DEBUG] 最終レスポンス: {response}")
         return response 
