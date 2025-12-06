@@ -286,7 +286,8 @@ class LineBotHandler:
                     if 1 <= month_num <= 12:
                         location = ai_result.get('location', '')
                         travel_time_minutes = ai_result.get('travel_time_minutes', None)
-                        return self._handle_month_availability(month_num, line_user_id, location=location, travel_time_minutes=travel_time_minutes)
+                        minimum_duration_minutes = ai_result.get('minimum_duration_minutes', None)
+                        return self._handle_month_availability(month_num, line_user_id, location=location, travel_time_minutes=travel_time_minutes, minimum_duration_minutes=minimum_duration_minutes)
             
             if 'error' in ai_result:
                 # AI処理に失敗した場合、ガイダンスメッセージを返す
@@ -299,9 +300,11 @@ class LineBotHandler:
                 print(f"[DEBUG] dates_info: {ai_result.get('dates', [])}")
                 location = ai_result.get('location', '')
                 travel_time_minutes = ai_result.get('travel_time_minutes', None)
+                minimum_duration_minutes = ai_result.get('minimum_duration_minutes', None)
                 print(f"[DEBUG] location: {location}")
                 print(f"[DEBUG] travel_time_minutes: {travel_time_minutes}")
-                return self._handle_availability_check(ai_result.get('dates', []), line_user_id, location=location, travel_time_minutes=travel_time_minutes)
+                print(f"[DEBUG] minimum_duration_minutes: {minimum_duration_minutes}")
+                return self._handle_availability_check(ai_result.get('dates', []), line_user_id, location=location, travel_time_minutes=travel_time_minutes, minimum_duration_minutes=minimum_duration_minutes)
             elif task_type == 'add_event':
                 # 予定追加時の重複確認ロジック（複数予定対応）
                 if not self.calendar_service:
@@ -535,7 +538,7 @@ class LineBotHandler:
             print(f"[DEBUG] 複数予定処理エラー: {e}")
             return TextSendMessage(text=f"予定の処理中にエラーが発生しました: {str(e)}")
     
-    def _handle_month_availability(self, month_num, line_user_id, location=None, travel_time_minutes=None):
+    def _handle_month_availability(self, month_num, line_user_id, location=None, travel_time_minutes=None, minimum_duration_minutes=None):
         """月全体の空き時間を処理します"""
         import calendar
         try:
@@ -565,10 +568,10 @@ class LineBotHandler:
                 })
                 current_date += timedelta(days=1)
             
-            print(f"[DEBUG] 月全体の空き時間処理: {year}年{month_num}月 ({len(dates_info)}日), location: {location}, travel_time_minutes: {travel_time_minutes}")
+            print(f"[DEBUG] 月全体の空き時間処理: {year}年{month_num}月 ({len(dates_info)}日), location: {location}, travel_time_minutes: {travel_time_minutes}, minimum_duration_minutes: {minimum_duration_minutes}")
             
             # 通常の空き時間チェック処理を呼び出し
-            return self._handle_availability_check(dates_info, line_user_id, location=location, travel_time_minutes=travel_time_minutes)
+            return self._handle_availability_check(dates_info, line_user_id, location=location, travel_time_minutes=travel_time_minutes, minimum_duration_minutes=minimum_duration_minutes)
             
         except Exception as e:
             print(f"[DEBUG] 月全体の空き時間処理でエラー: {e}")
@@ -576,7 +579,7 @@ class LineBotHandler:
             traceback.print_exc()
             return TextSendMessage(text=f"月の空き時間確認でエラーが発生しました: {str(e)}")
     
-    def _handle_availability_check(self, dates_info, line_user_id, location=None, travel_time_minutes=None):
+    def _handle_availability_check(self, dates_info, line_user_id, location=None, travel_time_minutes=None, minimum_duration_minutes=None):
         """空き時間確認を処理します"""
         try:
             print(f"[DEBUG] _handle_availability_check開始")
@@ -584,6 +587,7 @@ class LineBotHandler:
             print(f"[DEBUG] line_user_id: {line_user_id}")
             print(f"[DEBUG] location: {location}")
             print(f"[DEBUG] travel_time_minutes: {travel_time_minutes}")
+            print(f"[DEBUG] minimum_duration_minutes: {minimum_duration_minutes}")
             
             # ユーザーの認証状態をチェック
             if not self._check_user_auth(line_user_id):
@@ -712,6 +716,29 @@ class LineBotHandler:
                                         print(f"[DEBUG] 移動時間不足で除外: {slot_start_str}〜{slot_end_str}")
                                 free_slots = filtered_free_slots
                                 print(f"[DEBUG] 移動時間フィルタ後: {len(free_slots)}件")
+                            
+                            # 最小時間が指定されている場合、指定時間以上の空き時間のみ抽出
+                            if minimum_duration_minutes and minimum_duration_minutes > 0:
+                                print(f"[DEBUG] 最小時間フィルタ適用: {minimum_duration_minutes}分")
+                                filtered_free_slots = []
+                                minimum_delta = timedelta(minutes=minimum_duration_minutes)
+                                for slot in free_slots:
+                                    slot_start_str = slot['start']
+                                    slot_end_str = slot['end']
+                                    # 開始時刻と終了時刻をdatetimeに変換
+                                    slot_start_parsed = jst.localize(datetime.strptime(f"{date_str} {slot_start_str}", "%Y-%m-%d %H:%M"))
+                                    slot_end_parsed = jst.localize(datetime.strptime(f"{date_str} {slot_end_str}", "%Y-%m-%d %H:%M"))
+                                    # 空き時間の長さを計算
+                                    slot_duration = slot_end_parsed - slot_start_parsed
+                                    
+                                    # 指定時間以上かチェック
+                                    if slot_duration >= minimum_delta:
+                                        filtered_free_slots.append(slot)
+                                        print(f"[DEBUG] 最小時間条件を満たす空き時間: {slot_start_str}〜{slot_end_str} ({slot_duration.total_seconds() / 60:.0f}分)")
+                                    else:
+                                        print(f"[DEBUG] 最小時間不足で除外: {slot_start_str}〜{slot_end_str} ({slot_duration.total_seconds() / 60:.0f}分 < {minimum_duration_minutes}分)")
+                                free_slots = filtered_free_slots
+                                print(f"[DEBUG] 最小時間フィルタ後: {len(free_slots)}件")
                         else:
                             print(f"[DEBUG] 日付{i+1}のスロット範囲が無効: {slot_start} >= {slot_end}")
                             free_slots = []
