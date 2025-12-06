@@ -149,8 +149,14 @@ class AIService:
         for d in parsed['dates']:
             print(f"[DEBUG] datesループ: {d}")
             phrase = d.get('description', '') or original_text
-            # time, end_timeが両方セットされていれば何もしない
-            if d.get('time') and d.get('end_time'):
+            task_type = parsed.get('task_type', '')
+            # 空き時間確認の場合、「明日」「来週」などの日付表現があれば、時間帯を適切に設定
+            # まず日付表現をチェック
+            is_tomorrow = re.search(r'明日', phrase)
+            is_next_week = re.search(r'来週', phrase)
+            
+            # time, end_timeが両方セットされていても、空き時間確認で日付表現があれば補完する
+            if d.get('time') and d.get('end_time') and not (task_type == 'availability_check' and (is_tomorrow or is_next_week)):
                 new_dates.append(d)
                 continue
             # time, end_timeが空欄の場合のみ補完
@@ -176,10 +182,16 @@ class AIService:
             # 明日
             if re.search(r'明日', phrase):
                 d['date'] = (now + timedelta(days=1)).strftime('%Y-%m-%d')
-                if not d.get('time'):
+                # 空き時間確認の場合は、既存のtimeを無視して08:00〜22:00に設定
+                if task_type == 'availability_check':
                     d['time'] = '08:00'
-                if not d.get('end_time'):
                     d['end_time'] = '22:00'
+                    print(f"[DEBUG] 空き時間確認のため、明日の時間帯を08:00〜22:00に設定")
+                else:
+                    if not d.get('time'):
+                        d['time'] = '08:00'
+                    if not d.get('end_time'):
+                        d['end_time'] = '22:00'
             # 今日
             if re.search(r'今日', phrase):
                 d['date'] = now.strftime('%Y-%m-%d')

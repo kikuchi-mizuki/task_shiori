@@ -417,7 +417,17 @@ class GoogleCalendarService:
                     start_ev = datetime.fromisoformat(start.replace('Z', '+00:00'))
                     end_ev = datetime.fromisoformat(end.replace('Z', '+00:00'))
                     
-                    logger.info(f"[DEBUG] 予定{i+1}のパース後: {start_ev} 〜 {end_ev}")
+                    # タイムゾーンをJSTに統一
+                    if start_ev.tzinfo is None:
+                        start_ev = jst.localize(start_ev)
+                    else:
+                        start_ev = start_ev.astimezone(jst)
+                    if end_ev.tzinfo is None:
+                        end_ev = jst.localize(end_ev)
+                    else:
+                        end_ev = end_ev.astimezone(jst)
+                    
+                    logger.info(f"[DEBUG] 予定{i+1}のパース後（JST統一後）: {start_ev} 〜 {end_ev}")
                     
                     # 枠外の予定は除外
                     if end_ev <= start_dt or start_ev >= end_dt:
