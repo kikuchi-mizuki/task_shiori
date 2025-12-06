@@ -133,15 +133,28 @@ def callback():
         logger.warning("X-Line-Signature ヘッダーがありません")
         abort(400)
 
+    # リクエストボディを取得（テキストとして、UTF-8でデコード）
+    # LINE SDKのhandle()は文字列を期待するが、署名検証は正確なリクエストボディを必要とする
     body = request.get_data(as_text=True)
-    logger.debug("Request body (debug only): %s", body)
+    
+    # デバッグログ（本番環境では無効化推奨）
+    if logger.level <= logging.DEBUG:
+        logger.debug(f"Request body length: {len(body)} chars")
+        logger.debug(f"Request body (first 200 chars): {body[:200]}")
 
     try:
         # 署名を検証し、問題なければhandleに定義されている関数を呼び出す
         handler.handle(body, signature)
-    except InvalidSignatureError:
+    except InvalidSignatureError as e:
         # 署名検証で失敗したときは例外をあげる
-        logger.error("署名検証に失敗しました")
+        logger.error(f"署名検証に失敗しました: {str(e)}")
+        logger.debug(f"Signature header: {signature[:20]}...")
+        logger.debug(f"Body length: {len(body)}")
+        # チャネルシークレットの設定を確認（値は表示しない）
+        if Config.LINE_CHANNEL_SECRET:
+            logger.debug("LINE_CHANNEL_SECRET is set")
+        else:
+            logger.error("LINE_CHANNEL_SECRET is not set!")
         abort(400)
 
     # 正常終了時は200を返す
